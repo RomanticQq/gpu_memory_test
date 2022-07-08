@@ -31,22 +31,16 @@ data_transforms = {
 
 image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x), data_transforms[x]) for x in ['train', 'valid']}
 
-dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=32, shuffle=True) for x in
+dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=4, shuffle=True) for x in
                ['train', 'valid']}
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 criterion = nn.NLLLoss()
 
 
-def set_parameter_requires_grad(model, feature_extracting):
-    if feature_extracting:
-        for param in model.parameters():
-            param.requires_grad = False
-
 
 def initialize_model():
     model_ft = models.resnet101(pretrained=True)
-    set_parameter_requires_grad(model_ft, True)
     num_ftrs = model_ft.fc.in_features
     model_ft.fc = nn.Sequential(nn.Linear(num_ftrs, 102),
                                 nn.LogSoftmax(dim=1))
@@ -58,11 +52,13 @@ def train_model():
     optimizer = optim.Adam(model.parameters(), lr=1e-2)
     # 设置使用精度的类型
     # O0 单精度   O1 混合精度   O3 半精度
-    # model = model.to(device).half()
-    model, optimizer = amp.initialize(model, optimizer, opt_level='O3')
+    model = model.to(device)
+    # model = model.to(device)
+    model, optimizer = amp.initialize(model, optimizer, opt_level='O1')
     filename = 'checkpoint.pth'
     num_epochs = 1
-    use_amp = False
+    use_amp = True
+
     for epoch in range(num_epochs):
         model.train()
         for inputs, labels in tqdm(dataloaders['train']):
@@ -84,7 +80,6 @@ def train_model():
 def test_model():
     path = 'checkpoint.pth'
     model = torch.load(path)
-    model.to(device)
     model.eval()
     loss_num = 0
     for inputs, labels in tqdm(dataloaders['train']):
@@ -94,6 +89,22 @@ def test_model():
         loss = criterion(outputs, labels)
         loss_num = loss_num + loss.item()
 
+def test_trace_model():
+    path = 'checkpoint.pth'
+    path_1 = 'checkpoint_jit.pt'
+    # script_moudle = torch.jit.script(torch.load(path))
+    x = torch.randn([1, 3,  224, 224])
+    trace_moudle = torch.jit.trace(torch.load(path), x.to(device))
+    torch.jit.save(trace_moudle, path_1)
+    model = torch.jit.load(path_1)
+    model.eval()
+    loss_num = 0
+    for inputs, labels in tqdm(dataloaders['train']):
+        inputs = inputs.to(device)
+        labels = labels.to(device)
+        outputs = model(inputs)
+        loss = criterion(outputs, labels)
+        loss_num = loss_num + loss.item()
 
 if __name__ == '__main__':
-    fire.Fire()
+    train_model()

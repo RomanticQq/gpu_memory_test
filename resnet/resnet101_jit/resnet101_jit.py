@@ -30,22 +30,15 @@ data_transforms = {
 
 image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x), data_transforms[x]) for x in ['train', 'valid']}
 
-dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=32, shuffle=True) for x in
+dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=4, shuffle=True) for x in
                ['train', 'valid']}
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 criterion = nn.NLLLoss()
 
 
-def set_parameter_requires_grad(model, feature_extracting):
-    if feature_extracting:
-        for param in model.parameters():
-            param.requires_grad = False
-
-
 def initialize_model():
     model_ft = models.resnet101(pretrained=True)
-    set_parameter_requires_grad(model_ft, True)
     num_ftrs = model_ft.fc.in_features
     model_ft.fc = nn.Sequential(nn.Linear(num_ftrs, 102),
                                 nn.LogSoftmax(dim=1))
@@ -54,14 +47,6 @@ def initialize_model():
 
 def train_model():
     model = initialize_model()
-    #
-    # model = model.to(device)
-    # path_1 = 'checkpoint_jit.pt'
-    # x = torch.randn([1, 3, 224, 224])
-    # trace_moudle = torch.jit.trace(model, x.to(device))
-    # torch.jit.save(trace_moudle, path_1)
-    # model = torch.jit.load(path_1)
-    #
     model = model.to(device)
     optimizer = optim.Adam(model.parameters(), lr=1e-2)
     filename = 'checkpoint.pth'
@@ -78,13 +63,11 @@ def train_model():
             loss.backward()
             optimizer.step()
         torch.save(model, filename)
-        # torch.jit.save(trace_moudle, path_1)
 
 
 def test_model():
     path = 'checkpoint.pth'
     model = torch.load(path)
-    model.to(device)
     model.eval()
     loss_num = 0
     for inputs, labels in tqdm(dataloaders['train']):
@@ -109,6 +92,28 @@ def test_trace_model():
         inputs = inputs.to(device)
         labels = labels.to(device)
         outputs = model(inputs)
+        loss = criterion(outputs, labels)
+        loss_num = loss_num + loss.item()
+
+
+def test_trt_model():
+    import torch
+    from torch2trt import torch2trt
+
+    x = torch.ones((1, 3, 224, 224)).cuda()
+    path = 'checkpoint.pth'
+    model_trt = torch2trt(torch.load(path), [x])
+    path_trt = 'resnet101_trt.pth'
+    torch.save(model_trt.state_dict(), path_trt)
+    from torch2trt import TRTModule
+    model_trt = TRTModule()
+    model_trt.load_state_dict(torch.load(path_trt))
+    model_trt.eval()
+    loss_num = 0
+    for inputs, labels in tqdm(dataloaders['train']):
+        inputs = inputs.to(device)
+        labels = labels.to(device)
+        outputs = model_trt(inputs)
         loss = criterion(outputs, labels)
         loss_num = loss_num + loss.item()
 

@@ -41,41 +41,10 @@ data_transforms = {
 batch_size = 32
 
 image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x), data_transforms[x]) for x in ['train', 'valid']}
-print(image_datasets)
-exit()
+
 
 dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=batch_size, shuffle=True) for x in ['train', 'valid']}
 dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'valid']}
-class_names = image_datasets['train'].classes
-
-
-with open('cat_to_name.json', 'r') as f:
-    cat_to_name = json.load(f)
-
-
-def im_convert(tensor):
-    """ 展示数据"""
-
-    image = tensor.to("cpu").clone().detach()
-    image = image.numpy().squeeze()
-    image = image.transpose(1, 2, 0)
-    image = image * np.array((0.229, 0.224, 0.225)) + np.array((0.485, 0.456, 0.406))
-    image = image.clip(0, 1)
-
-    return image
-
-fig=plt.figure(figsize=(20, 12))
-columns = 4
-rows = 2
-
-dataiter = iter(dataloaders['valid'])
-inputs, classes = dataiter.next()
-
-for idx in range (columns*rows):
-    ax = fig.add_subplot(rows, columns, idx+1, xticks=[], yticks=[])
-    ax.set_title(cat_to_name[str(int(class_names[classes[idx]]))])
-    plt.imshow(im_convert(inputs[idx]))
-# plt.show()
 
 model_name = 'resnet'  #可选的比较多 ['resnet', 'alexnet', 'vgg', 'squeezenet', 'densenet', 'inception']
 #是否用人家训练好的特征来做
